@@ -7,6 +7,7 @@ import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { AuthResponse } from './types/auth-response.type';
 import { UserLog } from './entities/userLog.entity';
+import { UUID } from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -22,14 +23,15 @@ export class AuthService {
     const user = await this.userRepository.findOneBy({ email });
     if (!bcrypt.compareSync(password, user.password ) ) throw new BadRequestException('Email/Password Do not match.');
     const token = this.getJwtToken( user.id );
-    user.password = undefined;
-
+    
     const userLogged = this.userLogRepository.create({
+      userId: user.id,
       token: token,
       email: user.email,
       roles: user.roles
     });
-
+    user.password = undefined;
+    
     await this.userLogRepository.save( userLogged );
 
     return {
@@ -47,6 +49,17 @@ export class AuthService {
       return await this.userRepository.save( newUser );
     } catch (err) {
       this.handleDatabaseErrors(err.code);
+    }
+  }
+
+  async logout( id: string ) {
+    try {
+      const user = await this.userRepository.findOneBy({ id });
+      const userLogged = await this.userLogRepository.findOneBy({ userId: user.id });
+      await this.userLogRepository.remove(userLogged);
+      return true;
+    } catch (err) {
+      this.handleDatabaseErrors(err);
     }
   }
 
