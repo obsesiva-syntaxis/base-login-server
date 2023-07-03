@@ -1,5 +1,5 @@
-import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
-import { LoginUserDTO, RegisterUserDTO, VerifyUserDTO } from './dto';
+import { BadRequestException, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
+import { LoginUserDTO, RegisterUserDTO } from './dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
 import { Repository } from 'typeorm';
@@ -7,7 +7,7 @@ import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { AuthResponse } from './types/auth-response.type';
 import { UserLog } from './entities/userLog.entity';
-import { UUID } from 'crypto';
+import { JwtPayload } from './interfaces/jwt-payload.interface';
 
 @Injectable()
 export class AuthService {
@@ -21,8 +21,9 @@ export class AuthService {
 
   async login({ email, password }: LoginUserDTO): Promise<AuthResponse>{
     const user = await this.userRepository.findOneBy({ email });
+    if( !user ) throw new UnauthorizedException('Email/Password Do not match.');
     if (!bcrypt.compareSync(password, user.password ) ) throw new BadRequestException('Email/Password Do not match.');
-    const token = this.getJwtToken( user.id );
+    const token = this.getJwtToken({ id: user.id });
     
     const userLogged = this.userLogRepository.create({
       userId: user.id,
@@ -30,8 +31,8 @@ export class AuthService {
       email: user.email,
       roles: user.roles
     });
-    user.password = undefined;
     
+    user.password = undefined;
     await this.userLogRepository.save( userLogged );
 
     return {
@@ -46,7 +47,9 @@ export class AuthService {
         ...registerInput,
         password: bcrypt.hashSync( registerInput.password, 10),
       });
-      return await this.userRepository.save( newUser );
+      const userCreated = await this.userRepository.save( newUser );
+      userCreated.password = undefined;
+      return userCreated;
     } catch (err) {
       this.handleDatabaseErrors(err.code);
     }
@@ -63,14 +66,24 @@ export class AuthService {
     }
   }
 
-  async verifyUser( { token, userId }: VerifyUserDTO ): Promise<Boolean> {
-    const user = this.userRepository.findBy({ id: userId });
-    console.log(user);
-    return true;
+  private getJwtToken( payload: JwtPayload ) {
+    const token = this.jwtService.sign( payload );
+    return token;
+
   }
 
-  private getJwtToken( userId: string ) {
-    return this.jwtService.sign({ id: userId });
+  async validateUser( id:string ): Promise<User> {
+    const user = await this.userRepository.findOneById( id );
+    if ( !user.active ) throw new UnauthorizedException(`User is inactive, talk with an admin.`);
+    delete user.password;
+    return user;  
+  }
+
+  async checkAuthStatus( user: User ){
+    return {
+      ...user,
+      token: this.getJwtToken({ id: user.id })
+    };
   }
 
   private handleDatabaseErrors(code: any): never{
