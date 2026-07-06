@@ -1,95 +1,130 @@
-import { BadRequestException, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { LoginUserDTO, RegisterUserDTO } from './dto';
-import { InjectRepository } from '@nestjs/typeorm';
-import { User } from './entities/user.entity';
-import { Repository } from 'typeorm';
+import {
+  USER_REPOSITORY,
+  IUserRepository,
+  USER_LOG_REPOSITORY,
+  IUserLogRepository,
+} from './repositories';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
+import { instanceToPlain } from 'class-transformer';
 import { JwtService } from '@nestjs/jwt';
 import { AuthResponse } from './types/auth-response.type';
+import { User } from './entities/user.entity';
 import { UserLog } from './entities/userLog.entity';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
+import { DataSource } from 'typeorm';
 
 @Injectable()
 export class AuthService {
+  private readonly saltRounds: number;
+
   constructor(
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
-    @InjectRepository(UserLog)
-    private readonly userLogRepository: Repository<UserLog>,
-    private readonly jwtService: JwtService
-  ){}
-
-  async login({ email, password }: LoginUserDTO): Promise<AuthResponse>{
-    const user = await this.userRepository.findOneBy({ email });
-    if( !user ) throw new UnauthorizedException('Email/Password Do not match.');
-    if (!bcrypt.compareSync(password, user.password ) ) throw new BadRequestException('Email/Password Do not match.');
-    const token = this.getJwtToken({ id: user.id });
-    
-    const userLogged = this.userLogRepository.create({
-      userId: user.id,
-      token: token,
-      email: user.email,
-      roles: user.roles
-    });
-    
-    user.password = undefined;
-    await this.userLogRepository.save( userLogged );
-
-    return {
-      token,
-      user
-    };
+    @Inject(USER_REPOSITORY) private readonly userRepository: IUserRepository,
+    @Inject(USER_LOG_REPOSITORY)
+    private readonly userLogRepository: IUserLogRepository,
+    private readonly jwtService: JwtService,
+    private readonly dataSource: DataSource,
+  ) {
+    this.saltRounds = +(process.env.BCRYPT_SALT_ROUNDS || 10);
   }
 
-  async register( registerInput: RegisterUserDTO): Promise<User> {
+  async login({ email, password }: LoginUserDTO): Promise<AuthResponse> {
+    const user = await this.userRepository.findOneByEmail(email);
+    if (!user) throw new UnauthorizedException('Email/Password Do not match.');
+    if (!(await bcrypt.compare(password, user.password)))
+      throw new UnauthorizedException('Email/Password Do not match.');
+
+    const token = this.getJwtToken({ id: user.id });
+
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    await this.dataSource.transaction(async (manager) => {
+      await manager.upsert(
+        UserLog,
+        {
+          userId: user.id,
+          token: tokenHash,
+          email: user.email,
+          roles: user.roles,
+        },
+        ['userId'],
+      );
+    });
+
+    return { token, user };
+  }
+
+  async register(registerInput: RegisterUserDTO): Promise<User> {
     try {
+      const defaultRole = process.env.DEFAULT_ROLE || 'user';
+      const hashedPassword = await bcrypt.hash(
+        registerInput.password,
+        this.saltRounds,
+      );
       const newUser = this.userRepository.create({
         ...registerInput,
-        password: bcrypt.hashSync( registerInput.password, 10),
+        password: hashedPassword,
+        roles: [defaultRole],
       });
-      const userCreated = await this.userRepository.save( newUser );
-      userCreated.password = undefined;
+      const userCreated = await this.userRepository.save(newUser);
       return userCreated;
     } catch (err) {
-      this.handleDatabaseErrors(err.code);
+      const error = err as { code?: string };
+      this.handleDatabaseErrors(error.code);
     }
   }
 
-  async logout( id: string ) {
+  async logout(id: string) {
     try {
-      const user = await this.userRepository.findOneBy({ id });
-      const userLogged = await this.userLogRepository.findOneBy({ userId: user.id });
-      await this.userLogRepository.remove(userLogged);
+      await this.dataSource.transaction(async (manager) => {
+        const user = await manager.findOneBy(User, { id });
+        if (!user) throw new BadRequestException('User not found');
+        const userLog = await manager.findOneBy(UserLog, { userId: user.id });
+        if (userLog) {
+          await manager.remove(userLog);
+        }
+      });
       return true;
     } catch (err) {
-      this.handleDatabaseErrors(err);
+      if (err instanceof HttpException) throw err;
+      const error = err as { code?: string };
+      this.handleDatabaseErrors(error.code);
     }
   }
 
-  private getJwtToken( payload: JwtPayload ) {
-    const token = this.jwtService.sign( payload );
-    return token;
-
+  private getJwtToken(payload: JwtPayload) {
+    return this.jwtService.sign(payload);
   }
 
-  async validateUser( id:string ): Promise<User> {
-    const user = await this.userRepository.findOneById( id );
-    if ( !user.active ) throw new UnauthorizedException(`User is inactive, talk with an admin.`);
-    delete user.password;
-    return user;  
+  async validateUser(id: string): Promise<User> {
+    const user = await this.userRepository.findOneById(id);
+    if (!user) throw new UnauthorizedException('User not found');
+    if (!user.active)
+      throw new UnauthorizedException('User is inactive, talk with an admin.');
+    return user;
   }
 
-  async checkAuthStatus( user: User ){
+  async checkAuthStatus(user: User) {
     return {
-      ...user,
-      token: this.getJwtToken({ id: user.id })
+      ...instanceToPlain(user),
+      token: this.getJwtToken({ id: user.id }),
     };
   }
 
-  private handleDatabaseErrors(code: any): never{
-    if(code === '23505') throw new BadRequestException('email already exist in database.');
-    throw new InternalServerErrorException('internal server error please contact with developers');
+  private handleDatabaseErrors(code: string | undefined): never {
+    if (code === '23505')
+      throw new BadRequestException('Email already exists in database.');
+    throw new InternalServerErrorException(
+      'Internal server error. Please contact the administrator.',
+    );
   }
 }
-
-

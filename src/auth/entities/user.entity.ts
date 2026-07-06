@@ -1,35 +1,43 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
-const moment = require('moment-timezone');
+import { Exclude } from 'class-transformer';
+import {
+  Column,
+  CreateDateColumn,
+  DeleteDateColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 @Entity('user')
 export class User {
-    @PrimaryGeneratedColumn('uuid')
-    id: string;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
-    @Column('text', { unique: true })
-    email: string;
+  @Column('text', { unique: true })
+  email: string;
 
-    @Column('text')
-    password: string;
+  @Exclude()
+  @Column('text')
+  password: string;
 
-    @Column('text')
-    fullname: string;
+  @Column('text')
+  fullname: string;
 
-    @Column('bool', { default: true })
-    active: boolean;
+  @Column('bool', { default: true })
+  active: boolean;
 
-    @Column('text',{
-        array: true,
-        default: ['user']
-    })
-    roles: string[];
+  @Column('text', {
+    array: true,
+    default: ['user'],
+  })
+  roles: string[];
 
-    @Column({ type: 'timestamptz', default: moment().tz("America/Santiago").format() })
-    created_at: Date;
+  @CreateDateColumn({ type: 'timestamptz' })
+  created_at: Date;
 
-    @Column({ type: 'timestamptz', default: null })
-    modified_at: Date;
+  @UpdateDateColumn({ type: 'timestamptz', nullable: true })
+  modified_at: Date;
 
-    @Column({ type: 'timestamptz', default: null })
-    deleted_at: Date;
+  @DeleteDateColumn({ type: 'timestamptz', nullable: true })
+  deleted_at: Date;
 }

@@ -1,0 +1,12 @@
+.git
+.gitignore
+node_modules
+dist
+coverage
+docs
+test
+.env
+.env.template
+*.md
+.dockerignore
+postgres/

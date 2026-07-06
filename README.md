@@ -1,73 +1,125 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="200" alt="Nest Logo" /></a>
-</p>
+# base-login-server
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+NestJS REST API template with JWT authentication, PostgreSQL, and full Docker setup.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Prerequisites
 
-## Description
+- [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/) (Docker Engine + Compose)
+- [Git](https://git-scm.com/downloads)
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Installation
+## Quick start (Docker)
 
 ```bash
-$ yarn install
+# 1. Clone and enter the project
+git clone <repo-url> base-login-server
+cd base-login-server
+
+# 2. Configure environment
+copy .env.template .env
+# Edit .env if needed (defaults work for local development)
+
+# 3. Build and start everything
+docker compose up -d --build
+
+# 4. Verify it works
+curl -s http://localhost:3030/api/v1/auth/register -X POST ^
+  -H "Content-Type: application/json" ^
+  -d "{\"email\":\"demo@test.com\",\"password\":\"Demo1234\",\"fullname\":\"Demo\"}"
 ```
 
-## Running the app
+The API is now running at `http://localhost:3030/api/v1`.
+
+## Local development (without Docker)
+
+Requires [Node.js 18+](https://nodejs.org/), [Yarn](https://yarnpkg.com/), and a running PostgreSQL instance.
 
 ```bash
-# development
-$ yarn run start
+# 1. Install dependencies
+yarn install
 
-# watch mode
-$ yarn run start:dev
+# 2. Start PostgreSQL (Docker only for the database)
+docker compose up -d db
 
-# production mode
-$ yarn run start:prod
+# 3. Copy and configure env
+copy .env.template .env
+
+# 4. Start in watch mode
+yarn start:dev
 ```
 
-## Test
+## API endpoints
 
-```bash
-# unit tests
-$ yarn run test
+All endpoints are under `http://localhost:3030/api/v1/auth`.
 
-# e2e tests
-$ yarn run test:e2e
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/register` | No | Create a new user |
+| POST | `/login` | No | Authenticate and get JWT token |
+| GET | `/check-status` | Bearer token | Renew token and get user info |
+| GET | `/logout/:id` | Bearer token | End user session |
+| GET | `/private` | Bearer token | Demo protected route |
+| GET | `/private2` | Bearer token + admin/super-user | Role-guarded route |
+| GET | `/private3` | Bearer token + admin | Role-guarded route |
 
-# test coverage
-$ yarn run test:cov
+## Available commands
+
+| Command | Description |
+|---|---|
+| `yarn build` | Compile to `dist/` |
+| `yarn start:dev` | Watch mode with hot-reload |
+| `yarn start:prod` | Run compiled version |
+| `yarn lint` | ESLint with auto-fix |
+| `yarn format` | Prettier |
+| `yarn test` | Unit tests |
+| `yarn test:e2e` | E2E tests (requires PostgreSQL) |
+| `yarn migration:generate` | Generate TypeORM migration |
+| `yarn migration:run` | Apply migrations |
+| `yarn migration:revert` | Rollback last migration |
+
+## Environment variables
+
+All variables are documented in `.env.template`. Key ones:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `SERVER_PORT` | `3030` | API port |
+| `DB_HOST` | `localhost` | PostgreSQL host (set to `db` inside Docker) |
+| `JWT_SECRET` | — | Secret key for signing tokens |
+| `JWT_EXPIRATION` | `4h` | Token expiry duration |
+| `API_PREFIX` | `api` | Global URL prefix |
+| `API_VERSION` | `1` | Default API version |
+
+## Tech stack
+
+- **Runtime**: Node.js 18 (Alpine in Docker)
+- **Framework**: NestJS 9
+- **Language**: TypeScript 4.7
+- **Database**: PostgreSQL 14.4
+- **ORM**: TypeORM 0.3
+- **Auth**: Passport.js + JWT + bcrypt
+- **Validation**: class-validator + class-transformer
+- **Rate limiting**: @nestjs/throttler
+- **Logging**: Pino + nestjs-pino
+
+## Project structure
+
 ```
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://kamilmysliwiec.com)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](LICENSE).
+src/
+├── auth/
+│   ├── auth.controller.ts      # Route handlers
+│   ├── auth.service.ts         # Business logic
+│   ├── auth.module.ts          # Module wiring
+│   ├── auth.service.spec.ts    # Unit tests
+│   ├── decorators/             # @Auth(), @GetUser(), etc.
+│   ├── dto/                    # Request validation DTOs
+│   ├── entities/               # User and UserLog entities
+│   ├── guards/                 # Role-based guard
+│   ├── interfaces/             # ValidRoles enum, JwtPayload
+│   ├── repositories/           # Repository pattern with DI tokens
+│   ├── strategies/             # JWT passport strategy
+│   └── types/                  # Response types
+├── common/filters/             # Global exception filter
+├── database/                   # TypeORM migration data source
+├── app.module.ts               # Root module
+└── main.ts                     # Entrypoint
+```
