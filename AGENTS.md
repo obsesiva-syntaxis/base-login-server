@@ -50,3 +50,22 @@ docker compose up -d --build  # builds app image, starts both services
 - ESLint disables `explicit-function-return-type`, `explicit-module-boundary-types`, `no-explicit-any`, `interface-name-prefix`.
 - Timestamps use TypeORM `@CreateDateColumn` / `@UpdateDateColumn` / `@DeleteDateColumn` (database-level `NOW()`).
 - `UserLog` entity tracks active sessions; logout removes the log row.
+
+## Response format
+
+All endpoints must return the standard envelope defined by `ResponseInterceptor`:
+
+**Success** (`src/common/interceptors/response.interceptor.ts`):
+```json
+{ "statusCode": 200, "message": "OK", "data": { ... }, "timestamp": "2026-07-27T..." }
+```
+
+**Error** (global `AllExceptionsFilter`):
+```json
+{ "statusCode": 400, "message": "...", "timestamp": "...", "path": "/api/v1/..." }
+```
+
+- `data` preserves the controller's return value as-is.
+- For paginated endpoints, use `rows` for the items array: `{ rows: T[], total, page, limit }`.
+- Never return the raw entity or a primitive directly; the interceptor wraps it automatically.
+- No need to manually set statusCode, message, or timestamp in controllers.

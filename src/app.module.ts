@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
 import { HealthController } from './health/health.controller';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -36,6 +37,7 @@ import { LoggerModule } from 'nestjs-pino';
       migrationsRun: process.env.TYPEORM_MIGRATIONS_RUN === 'true',
     }),
     AuthModule,
+    UsersModule,
   ],
   controllers: [HealthController],
   providers: [
