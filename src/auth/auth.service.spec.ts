@@ -175,11 +175,19 @@ describe('AuthService', () => {
       roles: ['user'],
     };
 
-    it('should return user with new token', async () => {
+    it('should return user with new token and register the session', async () => {
+      dataSource.transaction.mockImplementation(async (cb) => {
+        const manager = {
+          upsert: jest.fn().mockResolvedValue({}),
+        };
+        return cb(manager);
+      });
+
       const result: any = await service.checkAuthStatus(mockUser as any);
 
       expect(result.token).toBe('test-token');
       expect(result.id).toBe('uuid');
+      expect(dataSource.transaction).toHaveBeenCalled();
     });
   });
 

@@ -45,20 +45,7 @@ export class AuthService {
 
     const token = this.getJwtToken({ id: user.id });
 
-    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-
-    await this.dataSource.transaction(async (manager) => {
-      await manager.upsert(
-        UserLog,
-        {
-          userId: user.id,
-          token: tokenHash,
-          email: user.email,
-          roles: user.roles,
-        },
-        ['userId'],
-      );
-    });
+    await this.registerSession(user, token);
 
     return { token, user };
   }
@@ -105,6 +92,23 @@ export class AuthService {
     return this.jwtService.sign(payload);
   }
 
+  private async registerSession(user: User, token: string): Promise<void> {
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    await this.dataSource.transaction(async (manager) => {
+      await manager.upsert(
+        UserLog,
+        {
+          userId: user.id,
+          token: tokenHash,
+          email: user.email,
+          roles: user.roles,
+        },
+        ['userId'],
+      );
+    });
+  }
+
   async validateUser(id: string): Promise<User> {
     const user = await this.userRepository.findOneById(id);
     if (!user) throw new UnauthorizedException('User not found');
@@ -114,9 +118,11 @@ export class AuthService {
   }
 
   async checkAuthStatus(user: User) {
+    const token = this.getJwtToken({ id: user.id });
+    await this.registerSession(user, token);
     return {
       ...instanceToPlain(user),
-      token: this.getJwtToken({ id: user.id }),
+      token,
     };
   }
 

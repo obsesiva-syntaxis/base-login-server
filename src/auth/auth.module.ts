@@ -8,6 +8,7 @@ import { UserLog } from './entities/userLog.entity';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { SessionGuard } from './guards/session.guard';
 import {
   USER_REPOSITORY,
   UserRepositoryImpl,
@@ -35,12 +36,14 @@ import {
   providers: [
     AuthService,
     JwtStrategy,
+    SessionGuard,
     { provide: USER_REPOSITORY, useClass: UserRepositoryImpl },
     { provide: USER_LOG_REPOSITORY, useClass: UserLogRepositoryImpl },
   ],
   exports: [
     TypeOrmModule,
     JwtStrategy,
+    SessionGuard,
     PassportModule,
     JwtModule,
     USER_REPOSITORY,

@@ -20,6 +20,7 @@ import { IncomingHttpHeaders } from 'http';
 import { RoleProtected } from './decorators/role-protected.decorator';
 import { ValidRoles } from './interfaces/valid-roles';
 import { UserRoleGuard } from './guards/jwt-auth.guard';
+import { SessionGuard } from './guards/session.guard';
 import {
   ApiTags,
   ApiOperation,
@@ -55,7 +56,7 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Logout and remove active session' })
   @RoleProtected(ValidRoles.superUser, ValidRoles.admin, ValidRoles.user)
-  @UseGuards(AuthGuard(), UserRoleGuard)
+  @UseGuards(AuthGuard(), UserRoleGuard, SessionGuard)
   logout(@Param('id', ParseUUIDPipe) id: string) {
     return this.authService.logout(id);
   }
@@ -71,7 +72,7 @@ export class AuthController {
   @Get('private')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Demo endpoint — extract user details from token' })
-  @UseGuards(AuthGuard())
+  @UseGuards(AuthGuard(), SessionGuard)
   testingPrivateRoute(
     @Req() request: Express.Request,
     @GetUser() user: User,
@@ -93,7 +94,7 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Demo endpoint — super-user or admin only' })
   @RoleProtected(ValidRoles.superUser, ValidRoles.admin)
-  @UseGuards(AuthGuard(), UserRoleGuard)
+  @UseGuards(AuthGuard(), UserRoleGuard, SessionGuard)
   privateRoute2(@GetUser() user: User) {
     return {
       ok: true,
