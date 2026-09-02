@@ -1,125 +1,221 @@
 # base-login-server
 
-NestJS REST API template with JWT authentication, PostgreSQL, and full Docker setup.
+Plantilla de API REST con **NestJS**, autenticación **JWT**, base de datos **PostgreSQL** y setup completo con **Docker**.
 
-## Prerequisites
+Incluye registro/login de usuarios, rutas protegidas por rol, migraciones con TypeORM, rate limiting, logging estructurado y un script de seed para poblar la base con usuarios de prueba.
+
+## Tabla de contenidos
+
+- [Prerrequisitos](#prerrequisitos)
+- [Quick start (Docker)](#quick-start-docker)
+- [Desarrollo local (sin Docker)](#desarrollo-local-sin-docker)
+- [Seed de usuarios](#seed-de-usuarios)
+- [Endpoints de la API](#endpoints-de-la-api)
+- [Comandos disponibles](#comandos-disponibles)
+- [Variables de entorno](#variables-de-entorno)
+- [Stack tecnológico](#stack-tecnológico)
+- [Estructura del proyecto](#estructura-del-proyecto)
+- [Tests](#tests)
+
+## Prerrequisitos
 
 - [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/) (Docker Engine + Compose)
 - [Git](https://git-scm.com/downloads)
+- Opcional, solo para correr el proyecto sin Docker o ejecutar el seed desde el host: [Node.js 18+](https://nodejs.org/) y [Yarn](https://yarnpkg.com/)
 
 ## Quick start (Docker)
 
 ```bash
-# 1. Clone and enter the project
+# 1. Clonar y entrar al proyecto
 git clone <repo-url> base-login-server
 cd base-login-server
 
-# 2. Configure environment
-copy .env.template .env
-# Edit .env if needed (defaults work for local development)
+# 2. Configurar variables de entorno
+cp .env.template .env
+# Completa los valores marcados como "---- COMPLETE THIS -----"
+# (DB_NAME, DB_PASSWORD, DB_HOST, DB_PORT, DB_USERNAME, JWT_SECRET)
+# Para desarrollo local con Docker, usa DB_HOST=localhost y DB_PORT=5432
 
-# 3. Build and start everything
+# 3. Levantar todo (API + PostgreSQL)
 docker compose up -d --build
 
-# 4. Verify it works
-curl -s http://localhost:3030/api/v1/auth/register -X POST ^
-  -H "Content-Type: application/json" ^
-  -d "{\"email\":\"demo@test.com\",\"password\":\"Demo1234\",\"fullname\":\"Demo\"}"
+# 4. Verificar que funciona
+curl -s http://localhost:3030/api/v1/auth/register -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"email":"demo@test.com","password":"Demo1234","fullname":"Demo"}'
 ```
 
-The API is now running at `http://localhost:3030/api/v1`.
+La API queda disponible en `http://localhost:3030/api/v1`.
 
-## Local development (without Docker)
+> **Nota:** dentro del contenedor `app`, `docker-compose.yaml` sobrescribe `DB_HOST` a `db` automáticamente (el nombre del servicio de PostgreSQL). El valor `DB_HOST` que pongas en tu `.env` solo aplica cuando corres procesos desde tu máquina host (desarrollo local o el script de seed).
 
-Requires [Node.js 18+](https://nodejs.org/), [Yarn](https://yarnpkg.com/), and a running PostgreSQL instance.
+Servicios que levanta `docker compose up`:
+
+| Servicio | Contenedor | Puerto host | Descripción |
+| --- | --- | --- | --- |
+| `app` | `base-login-backend` | `${SERVER_PORT}` (3030 por defecto) | API NestJS |
+| `db` | `auth-user-db` | `5432` | PostgreSQL 14.4, con healthcheck y volumen persistente `postgres-data` |
+
+## Desarrollo local (sin Docker)
+
+Requiere [Node.js 18+](https://nodejs.org/), [Yarn](https://yarnpkg.com/), y una instancia de PostgreSQL corriendo.
 
 ```bash
-# 1. Install dependencies
+# 1. Instalar dependencias
 yarn install
 
-# 2. Start PostgreSQL (Docker only for the database)
+# 2. Levantar solo la base de datos con Docker
 docker compose up -d db
 
-# 3. Copy and configure env
-copy .env.template .env
+# 3. Copiar y configurar el .env
+cp .env.template .env
+# DB_HOST debe ser "localhost" en este modo
 
-# 4. Start in watch mode
+# 4. Iniciar en modo watch
 yarn start:dev
 ```
 
-## API endpoints
+## Seed de usuarios
 
-All endpoints are under `http://localhost:3030/api/v1/auth`.
+El repo incluye `docs/seed-users.js`, un script que inserta **500.000 usuarios** de prueba directamente en PostgreSQL (sin pasar por la API), pensado para probar rendimiento, paginación o carga de datos.
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| POST | `/register` | No | Create a new user |
-| POST | `/login` | No | Authenticate and get JWT token |
-| GET | `/check-status` | Bearer token | Renew token and get user info |
-| GET | `/logout/:id` | Bearer token | End user session |
-| GET | `/private` | Bearer token | Demo protected route |
-| GET | `/private2` | Bearer token + admin/super-user | Role-guarded route |
-| GET | `/private3` | Bearer token + admin | Role-guarded route |
+```bash
+yarn seed-users
+```
 
-## Available commands
+Detalles de cómo funciona:
 
-| Command | Description |
-|---|---|
-| `yarn build` | Compile to `dist/` |
-| `yarn start:dev` | Watch mode with hot-reload |
-| `yarn start:prod` | Run compiled version |
-| `yarn lint` | ESLint with auto-fix |
+- Inserta los usuarios en **lotes de 1000** mediante `INSERT ... VALUES (...), (...), ...` para no saturar la conexión.
+- Cada usuario se crea con:
+  - Email: `user1@seed.com`, `user2@seed.com`, ... hasta `user500000@seed.com`
+  - Password: `Seed1234` (igual para todos, hasheada una sola vez con `bcrypt` y reutilizada en todos los inserts para no recalcularla 500.000 veces)
+  - `fullname`: `User 1`, `User 2`, etc.
+  - `roles`: `{user}`
+- Usa `ON CONFLICT (email) DO NOTHING`, por lo que **es seguro ejecutarlo más de una vez**: no duplica usuarios ya insertados.
+- Imprime el progreso en consola cada 10.000 registros.
+- Se conecta a la base usando las variables `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD` y `DB_NAME` de tu `.env` (vía `dotenv`), **no** a través del API.
+
+Requisitos para ejecutarlo:
+
+1. Tener el `.env` configurado en la raíz del proyecto.
+2. Tener PostgreSQL accesible desde tu máquina host. Si la base corre en Docker (`docker compose up -d db` o el stack completo), asegúrate de que `DB_HOST=localhost` y `DB_PORT=5432` en tu `.env`, ya que el script corre en el host y no dentro del contenedor.
+3. Tener las dependencias instaladas (`yarn install`), ya que el script usa `pg` y `bcrypt`.
+4. Que las migraciones estén aplicadas (la tabla `user` debe existir antes de correr el seed):
+   ```bash
+   yarn migration:run
+   ```
+
+Ejemplo de flujo completo con Docker:
+
+```bash
+docker compose up -d --build   # levanta app + db
+yarn install                   # dependencias en el host (para correr el seed)
+yarn migration:run              # asegura que la tabla "user" exista
+yarn seed-users                 # inserta los 500.000 usuarios
+```
+
+> Insertar 500.000 filas puede tardar varios minutos dependiendo de tu máquina. Si solo necesitas unos pocos usuarios de prueba, puedes editar la constante `TOTAL` en `docs/seed-users.js` antes de correrlo.
+
+## Endpoints de la API
+
+Todos los endpoints están bajo `http://localhost:3030/api/v1/auth`.
+
+| Método | Ruta | Auth | Descripción |
+| --- | --- | --- | --- |
+| POST | `/register` | No | Crea un nuevo usuario |
+| POST | `/login` | No | Autentica y devuelve un token JWT |
+| GET | `/check-status` | Bearer token | Renueva el token y devuelve info del usuario |
+| GET | `/logout/:id` | Bearer token | Termina la sesión del usuario |
+| GET | `/private` | Bearer token | Ruta protegida de demostración |
+| GET | `/private2` | Bearer token + rol admin/super-user | Ruta protegida por rol |
+| GET | `/private3` | Bearer token + rol admin | Ruta protegida por rol |
+
+Una colección de Postman lista para importar está disponible en [`docs/base-login-server.postman_collection.json`](./docs/base-login-server.postman_collection.json).
+
+## Comandos disponibles
+
+| Comando | Descripción |
+| --- | --- |
+| `yarn build` | Compila a `dist/` |
+| `yarn start:dev` | Modo watch con hot-reload |
+| `yarn start:prod` | Corre la versión compilada |
+| `yarn lint` | ESLint con auto-fix |
 | `yarn format` | Prettier |
-| `yarn test` | Unit tests |
-| `yarn test:e2e` | E2E tests (requires PostgreSQL) |
-| `yarn migration:generate` | Generate TypeORM migration |
-| `yarn migration:run` | Apply migrations |
-| `yarn migration:revert` | Rollback last migration |
+| `yarn test` | Tests unitarios |
+| `yarn test:e2e` | Tests E2E (requiere PostgreSQL) |
+| `yarn seed-users` | Puebla la base con 500.000 usuarios de prueba (ver [Seed de usuarios](#seed-de-usuarios)) |
+| `yarn migration:generate` | Genera una migración de TypeORM |
+| `yarn migration:run` | Aplica las migraciones |
+| `yarn migration:revert` | Revierte la última migración |
+| `yarn docker-build` | Levanta y reconstruye solo el servicio `app` vía Docker Compose |
 
-## Environment variables
+## Variables de entorno
 
-All variables are documented in `.env.template`. Key ones:
+Todas las variables están documentadas en `.env.template`. Estas son las principales:
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `SERVER_PORT` | `3030` | API port |
-| `DB_HOST` | `localhost` | PostgreSQL host (set to `db` inside Docker) |
-| `JWT_SECRET` | — | Secret key for signing tokens |
-| `JWT_EXPIRATION` | `4h` | Token expiry duration |
-| `API_PREFIX` | `api` | Global URL prefix |
-| `API_VERSION` | `1` | Default API version |
+| Variable | Valor por defecto | Propósito |
+| --- | --- | --- |
+| `DB_NAME` | — | Nombre de la base de datos PostgreSQL |
+| `DB_USERNAME` | — | Usuario de PostgreSQL |
+| `DB_PASSWORD` | — | Password de PostgreSQL |
+| `DB_HOST` | — | Host de PostgreSQL (`localhost` fuera de Docker; dentro del contenedor `app`, `docker-compose.yaml` lo fuerza a `db`) |
+| `DB_PORT` | — | Puerto de PostgreSQL |
+| `SERVER_PORT` | `3030` | Puerto de la API |
+| `JWT_SECRET` | — | Clave secreta para firmar los tokens |
+| `JWT_EXPIRATION` | `4h` | Duración del token |
+| `API_PREFIX` | `api` | Prefijo global de las rutas |
+| `API_VERSION` | `1` | Versión de API por defecto |
+| `CORS_ORIGIN` | `*` | Origen permitido para CORS |
+| `THROTTLE_TTL` | `60000` | Ventana de rate limiting (ms) |
+| `THROTTLE_LIMIT` | `10` | Máximo de requests por ventana |
+| `BCRYPT_SALT_ROUNDS` | `10` | Rondas de sal para el hasheo de passwords en la app (el script de seed usa 10 fijo, independiente de esta variable) |
+| `TYPEORM_MIGRATIONS_RUN` | `false` | Si es `true`, corre las migraciones automáticamente al iniciar |
+| `DEFAULT_ROLE` | `user` | Rol asignado por defecto a los usuarios nuevos |
+| `DEFAULT_TIMEZONE` | `America/Santiago` | Timezone por defecto de la aplicación |
 
-## Tech stack
+## Stack tecnológico
 
-- **Runtime**: Node.js 18 (Alpine in Docker)
+- **Runtime**: Node.js 18 (Alpine en Docker)
 - **Framework**: NestJS 9
-- **Language**: TypeScript 4.7
-- **Database**: PostgreSQL 14.4
+- **Lenguaje**: TypeScript 4.7
+- **Base de datos**: PostgreSQL 14.4
 - **ORM**: TypeORM 0.3
 - **Auth**: Passport.js + JWT + bcrypt
-- **Validation**: class-validator + class-transformer
+- **Validación**: class-validator + class-transformer
 - **Rate limiting**: @nestjs/throttler
 - **Logging**: Pino + nestjs-pino
 
-## Project structure
+## Estructura del proyecto
 
 ```
 src/
 ├── auth/
 │   ├── auth.controller.ts      # Route handlers
-│   ├── auth.service.ts         # Business logic
-│   ├── auth.module.ts          # Module wiring
-│   ├── auth.service.spec.ts    # Unit tests
+│   ├── auth.service.ts         # Lógica de negocio
+│   ├── auth.module.ts          # Wiring del módulo
+│   ├── auth.service.spec.ts    # Tests unitarios
 │   ├── decorators/             # @Auth(), @GetUser(), etc.
-│   ├── dto/                    # Request validation DTOs
-│   ├── entities/               # User and UserLog entities
-│   ├── guards/                 # Role-based guard
-│   ├── interfaces/             # ValidRoles enum, JwtPayload
-│   ├── repositories/           # Repository pattern with DI tokens
-│   ├── strategies/             # JWT passport strategy
-│   └── types/                  # Response types
-├── common/filters/             # Global exception filter
-├── database/                   # TypeORM migration data source
-├── app.module.ts               # Root module
-└── main.ts                     # Entrypoint
+│   ├── dto/                    # DTOs de validación de requests
+│   ├── entities/               # Entidades User y UserLog
+│   ├── guards/                 # Guard basado en roles
+│   ├── interfaces/             # Enum ValidRoles, JwtPayload
+│   ├── repositories/           # Patrón repository con tokens de DI
+│   ├── strategies/             # Estrategia JWT de passport
+│   └── types/                  # Tipos de respuesta
+├── common/filters/             # Filtro global de excepciones
+├── database/                   # Data source de migraciones TypeORM
+├── app.module.ts               # Módulo raíz
+└── main.ts                     # Entry point
+
+docs/
+├── seed-users.js                              # Script de seed (ver arriba)
+└── base-login-server.postman_collection.json  # Colección de Postman
+```
+
+## Tests
+
+```bash
+yarn test        # Unitarios
+yarn test:e2e     # E2E (requiere PostgreSQL corriendo, p. ej. docker compose up -d db)
+yarn test:cov     # Cobertura
 ```
