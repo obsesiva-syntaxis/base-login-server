@@ -3,3 +3,5 @@ export enum ValidRoles {
   superUser = 'super-user',
   user = 'user',
 }
+
+export type AssignableRole = Exclude<ValidRoles, ValidRoles.superUser>;

@@ -22,21 +22,26 @@ async function bootstrap() {
   const prefix = configService.get('API_PREFIX', 'api');
   const version = configService.get('API_VERSION', '1');
   const corsOrigin = configService.get('CORS_ORIGIN', '*');
-
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Base Login Server API')
-    .setDescription('Authentication server with JWT, roles, and rate limiting')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('docs', app, document);
+  const nodeEnv = configService.get('NODE_ENV', 'development');
 
   app.setGlobalPrefix(prefix, { exclude: ['docs', 'docs/(.*)'] });
   app.enableVersioning({
     type: VersioningType.URI,
     defaultVersion: version,
   });
+
+  if (nodeEnv !== 'production') {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('Base Login Server API')
+      .setDescription(
+        'Authentication server with JWT, roles, and rate limiting',
+      )
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('docs', app, document);
+  }
 
   app.enableCors({
     origin:

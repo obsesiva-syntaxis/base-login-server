@@ -4,18 +4,21 @@ const path = require('path');
 
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 
-const TOTAL = 500000;
+const TOTAL = 5000;
 const BATCH = 1000;
 const PASSWORD = 'Seed1234';
 const DEFAULT_ROLE = '{user}';
 
 async function main() {
+  const dbRejectUnauthorized =
+    process.env.DB_SSL_REJECT_UNAUTHORIZED ??
+    (process.env.NODE_ENV === 'production' ? 'true' : 'false');
+
   const pool = new Pool({
-    host: process.env.DB_HOST,
-    port: +(process.env.DB_PORT ?? 5432),
-    user: process.env.DB_USERNAME,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+      rejectUnauthorized: dbRejectUnauthorized === 'true',
+    },
   });
 
   const hashedPassword = await bcrypt.hash(PASSWORD, 10);
@@ -47,7 +50,7 @@ async function main() {
   }
 
   await pool.end();
-  console.log('Done! 500000 users inserted.');
+  console.log(`Done! ${TOTAL} users inserted.`);
 }
 
 main().catch((err) => {

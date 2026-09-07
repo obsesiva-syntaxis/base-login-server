@@ -8,7 +8,6 @@ export const USER_LOG_REPOSITORY = 'USER_LOG_REPOSITORY';
 export interface IUserLogRepository {
   findByUserId(userId: string): Promise<UserLog | null>;
   save(log: UserLog): Promise<UserLog>;
-  create(data: Partial<UserLog>): UserLog;
   remove(log: UserLog): Promise<UserLog>;
 }
 
@@ -25,10 +24,6 @@ export class UserLogRepositoryImpl implements IUserLogRepository {
 
   async save(log: UserLog): Promise<UserLog> {
     return this.repo.save(log);
-  }
-
-  create(data: Partial<UserLog>): UserLog {
-    return this.repo.create(data);
   }
 
   async remove(log: UserLog): Promise<UserLog> {

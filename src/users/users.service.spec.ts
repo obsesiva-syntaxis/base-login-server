@@ -1,8 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UsersService } from './users.service';
 import { USER_REPOSITORY, USER_LOG_REPOSITORY } from '../auth/repositories';
+import { ValidRoles } from '../auth/interfaces/valid-roles';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { Logger } from 'nestjs-pino';
 
 const mockUserRepository = {
   findOneByEmail: jest.fn(),
@@ -16,12 +18,17 @@ const mockUserRepository = {
 const mockUserLogRepository = {
   findByUserId: jest.fn(),
   save: jest.fn(),
-  create: jest.fn(),
   remove: jest.fn(),
 };
 
 const mockDataSource = {
   transaction: jest.fn(),
+};
+
+const mockLogger = {
+  error: jest.fn(),
+  log: jest.fn(),
+  warn: jest.fn(),
 };
 
 describe('UsersService', () => {
@@ -36,6 +43,7 @@ describe('UsersService', () => {
         { provide: USER_REPOSITORY, useValue: mockUserRepository },
         { provide: USER_LOG_REPOSITORY, useValue: mockUserLogRepository },
         { provide: DataSource, useValue: mockDataSource },
+        { provide: Logger, useValue: mockLogger },
       ],
     }).compile();
 
@@ -47,16 +55,63 @@ describe('UsersService', () => {
   });
 
   describe('findAll', () => {
-    it('should return paginated users', async () => {
+    it('should pass filters to the repository and return paginated users', async () => {
       const users = [{ id: 'uuid', email: 'test@test.com' }];
       userRepository.findAllAndCount.mockResolvedValue([users, 1]);
 
-      const result = await service.findAll({ page: 1, limit: 10 });
-
-      expect(userRepository.findAllAndCount).toHaveBeenCalledWith(0, 10, {
-        created_at: 'DESC',
+      const result = await service.findAll({
+        page: 2,
+        limit: 5,
+        email: 'test',
       });
-      expect(result).toEqual({ rows: users, total: 1, page: 1, limit: 10 });
+
+      expect(userRepository.findAllAndCount).toHaveBeenCalledWith(
+        5,
+        5,
+        {
+          created_at: 'DESC',
+        },
+        {
+          email: 'test',
+        },
+      );
+      expect(result).toEqual({ rows: users, total: 1, page: 2, limit: 5 });
+    });
+
+    it('should forward age and role based filters', async () => {
+      userRepository.findAllAndCount.mockResolvedValue([[], 0]);
+
+      await service.findAll({
+        fullname: 'john',
+        active: false,
+        roles: ValidRoles.user,
+      });
+
+      expect(userRepository.findAllAndCount).toHaveBeenCalledWith(
+        0,
+        10,
+        { created_at: 'DESC' },
+        { fullname: 'john', active: false, roles: ValidRoles.user },
+      );
+    });
+
+    it('should forward date range filters', async () => {
+      userRepository.findAllAndCount.mockResolvedValue([[], 0]);
+
+      await service.findAll({
+        createdAtFrom: '2024-01-01T00:00:00.000Z',
+        createdAtTo: '2024-12-31T23:59:59.999Z',
+      });
+
+      expect(userRepository.findAllAndCount).toHaveBeenCalledWith(
+        0,
+        10,
+        { created_at: 'DESC' },
+        {
+          createdAtFrom: '2024-01-01T00:00:00.000Z',
+          createdAtTo: '2024-12-31T23:59:59.999Z',
+        },
+      );
     });
   });
 

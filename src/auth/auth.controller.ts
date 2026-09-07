@@ -5,22 +5,14 @@ import {
   ParseUUIDPipe,
   Get,
   Param,
-  UseGuards,
-  Req,
-  Headers,
+  Delete,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginUserDTO, RegisterUserDTO } from './dto';
 import { Auth } from './decorators/auth.decorator';
 import { GetUser } from './decorators/get-user.decorator';
 import { User } from './entities/user.entity';
-import { AuthGuard } from '@nestjs/passport';
-import { RawHeaders } from './decorators/raw-headers.decorator';
-import { IncomingHttpHeaders } from 'http';
-import { RoleProtected } from './decorators/role-protected.decorator';
 import { ValidRoles } from './interfaces/valid-roles';
-import { UserRoleGuard } from './guards/jwt-auth.guard';
-import { SessionGuard } from './guards/session.guard';
 import {
   ApiTags,
   ApiOperation,
@@ -52,13 +44,14 @@ export class AuthController {
     return this.authService.login(loginInput);
   }
 
-  @Get('logout/:id')
+  @Delete('logout/:id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Logout and remove active session' })
-  @RoleProtected(ValidRoles.superUser, ValidRoles.admin, ValidRoles.user)
-  @UseGuards(AuthGuard(), UserRoleGuard, SessionGuard)
-  logout(@Param('id', ParseUUIDPipe) id: string) {
-    return this.authService.logout(id);
+  @ApiResponse({ status: 200, description: 'Session ended successfully' })
+  @ApiResponse({ status: 403, description: 'Cannot end another user session' })
+  @Auth()
+  logout(@Param('id', ParseUUIDPipe) id: string, @GetUser() user: User) {
+    return this.authService.logout(id, user);
   }
 
   @Get('check-status')
@@ -72,29 +65,23 @@ export class AuthController {
   @Get('private')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Demo endpoint — extract user details from token' })
-  @UseGuards(AuthGuard(), SessionGuard)
+  @Auth()
   testingPrivateRoute(
-    @Req() request: Express.Request,
     @GetUser() user: User,
     @GetUser('email') userEmail: string,
-    @RawHeaders() rawHeaders: string[],
-    @Headers() headers: IncomingHttpHeaders,
   ) {
     return {
       ok: true,
       message: 'Hola Mundo Private',
       user,
       userEmail,
-      rawHeaders,
-      headers,
     };
   }
 
   @Get('private2')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Demo endpoint — super-user or admin only' })
-  @RoleProtected(ValidRoles.superUser, ValidRoles.admin)
-  @UseGuards(AuthGuard(), UserRoleGuard, SessionGuard)
+  @Auth(ValidRoles.superUser, ValidRoles.admin)
   privateRoute2(@GetUser() user: User) {
     return {
       ok: true,

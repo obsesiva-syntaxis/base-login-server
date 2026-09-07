@@ -2,13 +2,20 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AuthService } from './auth.service';
 import { JwtService } from '@nestjs/jwt';
 import { USER_REPOSITORY, USER_LOG_REPOSITORY } from './repositories';
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { DataSource } from 'typeorm';
+import { User } from './entities/user.entity';
+import { Logger } from 'nestjs-pino';
 
 const mockUserRepository = {
   findOneByEmail: jest.fn(),
   findOneById: jest.fn(),
+  findOneByIdWithSession: jest.fn(),
   save: jest.fn(),
   create: jest.fn(),
 };
@@ -16,7 +23,6 @@ const mockUserRepository = {
 const mockUserLogRepository = {
   findByUserId: jest.fn(),
   save: jest.fn(),
-  create: jest.fn(),
   remove: jest.fn(),
 };
 
@@ -26,6 +32,12 @@ const mockJwtService = {
 
 const mockDataSource = {
   transaction: jest.fn(),
+};
+
+const mockLogger = {
+  error: jest.fn(),
+  log: jest.fn(),
+  warn: jest.fn(),
 };
 
 describe('AuthService', () => {
@@ -42,6 +54,7 @@ describe('AuthService', () => {
         { provide: USER_LOG_REPOSITORY, useValue: mockUserLogRepository },
         { provide: JwtService, useValue: mockJwtService },
         { provide: DataSource, useValue: mockDataSource },
+        { provide: Logger, useValue: mockLogger },
       ],
     }).compile();
 
@@ -135,6 +148,19 @@ describe('AuthService', () => {
         service.login({ ...loginDto, password: 'WrongPass1' }),
       ).rejects.toThrow(UnauthorizedException);
     });
+
+    it('should throw when the user is inactive', async () => {
+      userRepository.findOneByEmail.mockResolvedValue({
+        ...mockUser,
+        active: false,
+      });
+
+      await expect(service.login(loginDto)).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(jwtService.sign).not.toHaveBeenCalled();
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+    });
   });
 
   describe('validateUser', () => {
@@ -148,7 +174,7 @@ describe('AuthService', () => {
     };
 
     it('should return user when active', async () => {
-      userRepository.findOneById.mockResolvedValue(mockUser);
+      userRepository.findOneByIdWithSession.mockResolvedValue(mockUser);
 
       const result = await service.validateUser('uuid');
 
@@ -156,7 +182,7 @@ describe('AuthService', () => {
     });
 
     it('should throw when user is inactive', async () => {
-      userRepository.findOneById.mockResolvedValue({
+      userRepository.findOneByIdWithSession.mockResolvedValue({
         ...mockUser,
         active: false,
       });
@@ -175,24 +201,24 @@ describe('AuthService', () => {
       roles: ['user'],
     };
 
-    it('should return user with new token and register the session', async () => {
-      dataSource.transaction.mockImplementation(async (cb) => {
-        const manager = {
-          upsert: jest.fn().mockResolvedValue({}),
-        };
-        return cb(manager);
-      });
+    it('should return user data without rotating the token', async () => {
+      const result = await service.checkAuthStatus(mockUser as any);
 
-      const result: any = await service.checkAuthStatus(mockUser as any);
-
-      expect(result.token).toBe('test-token');
-      expect(result.id).toBe('uuid');
-      expect(dataSource.transaction).toHaveBeenCalled();
+      expect(result).toEqual(mockUser);
+      expect(mockJwtService.sign).not.toHaveBeenCalled();
+      expect(dataSource.transaction).not.toHaveBeenCalled();
     });
   });
 
   describe('logout', () => {
-    it('should remove user log successfully', async () => {
+    const mockCurrentUser = {
+      id: 'uuid',
+      email: 'test@example.com',
+      fullname: 'Test User',
+      roles: ['user'],
+    } as User;
+
+    it('should remove user log successfully for the owner', async () => {
       dataSource.transaction.mockImplementation(async (cb) => {
         const manager = {
           findOneBy: jest
@@ -204,7 +230,35 @@ describe('AuthService', () => {
         return cb(manager);
       });
 
-      const result = await service.logout('uuid');
+      const result = await service.logout('uuid', mockCurrentUser);
+
+      expect(result).toBe(true);
+    });
+
+    it('should throw ForbiddenException when a non-admin tries to end another user session', async () => {
+      await expect(
+        service.logout('other-uuid', mockCurrentUser),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should allow an admin to end another user session', async () => {
+      const adminUser = {
+        ...mockCurrentUser,
+        id: 'admin-uuid',
+        roles: ['admin'],
+      };
+      dataSource.transaction.mockImplementation(async (cb) => {
+        const manager = {
+          findOneBy: jest
+            .fn()
+            .mockResolvedValueOnce({ id: 'target-uuid' })
+            .mockResolvedValueOnce({ userId: 'target-uuid', token: 'tok' }),
+          remove: jest.fn().mockResolvedValue({}),
+        };
+        return cb(manager);
+      });
+
+      const result = await service.logout('target-uuid', adminUser as any);
 
       expect(result).toBe(true);
     });

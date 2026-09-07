@@ -8,6 +8,10 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 
+const dbRejectUnauthorized =
+  process.env.DB_SSL_REJECT_UNAUTHORIZED ??
+  (process.env.NODE_ENV === 'production' ? 'true' : 'false');
+
 @Module({
   imports: [
     ConfigModule.forRoot(),
@@ -27,11 +31,10 @@ import { LoggerModule } from 'nestjs-pino';
     ]),
     TypeOrmModule.forRoot({
       type: 'postgres',
-      host: process.env.DB_HOST,
-      port: +(process.env.DB_PORT ?? 5432),
-      username: process.env.DB_USERNAME,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME,
+      url: process.env.DATABASE_URL,
+      ssl: {
+        rejectUnauthorized: dbRejectUnauthorized === 'true',
+      },
       autoLoadEntities: true,
       synchronize: process.env.NODE_ENV !== 'production',
       migrationsRun: process.env.TYPEORM_MIGRATIONS_RUN === 'true',

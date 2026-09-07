@@ -74,7 +74,7 @@ describe('AllExceptionsFilter', () => {
     expect(mockJson).toHaveBeenCalledWith(
       expect.objectContaining({
         timestamp: expect.any(String),
-        path: '/test',
+        data: { path: '/test' },
       }),
     );
   });

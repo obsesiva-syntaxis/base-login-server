@@ -14,8 +14,9 @@ import {
 } from '../auth/repositories';
 import { User } from '../auth/entities/user.entity';
 import { UserLog } from '../auth/entities/userLog.entity';
-import { UpdateUserDTO, PaginationDTO } from './dto';
+import { UpdateUserDTO, QueryUsersDTO } from './dto';
 import { DataSource } from 'typeorm';
+import { Logger } from 'nestjs-pino';
 
 @Injectable()
 export class UsersService {
@@ -24,12 +25,13 @@ export class UsersService {
     @Inject(USER_LOG_REPOSITORY)
     private readonly userLogRepository: IUserLogRepository,
     private readonly dataSource: DataSource,
+    private readonly logger: Logger,
   ) {}
 
   async findAll(
-    pagination: PaginationDTO,
+    query: QueryUsersDTO,
   ): Promise<{ rows: User[]; total: number; page: number; limit: number }> {
-    const { page = 1, limit = 10 } = pagination;
+    const { page = 1, limit = 10, ...filters } = query;
     const skip = (page - 1) * limit;
     const [rows, total] = await this.userRepository.findAllAndCount(
       skip,
@@ -37,6 +39,7 @@ export class UsersService {
       {
         created_at: 'DESC',
       },
+      filters,
     );
     return { rows, total, page, limit };
   }
@@ -61,6 +64,7 @@ export class UsersService {
       const error = err as { code?: string };
       if (error.code === '23505')
         throw new BadRequestException('Email already exists');
+      this.logger.error(error, 'Unexpected error while updating user');
       throw new InternalServerErrorException(
         'Internal server error. Please contact the administrator.',
       );
@@ -78,6 +82,7 @@ export class UsersService {
       return true;
     } catch (err) {
       if (err instanceof HttpException) throw err;
+      this.logger.error(err, 'Unexpected error while removing user');
       throw new InternalServerErrorException(
         'Internal server error. Please contact the administrator.',
       );

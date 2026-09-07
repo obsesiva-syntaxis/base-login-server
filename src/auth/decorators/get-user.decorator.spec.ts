@@ -6,7 +6,7 @@ import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 function getParamDecoratorFactory(decorator: Function) {
   // eslint-disable-next-line @typescript-eslint/no-empty-function
   class TestDecorator {
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    // eslint-disable-next-line @typescript-eslint/no-empty-function, @typescript-eslint/no-unused-vars
     test(@decorator() _value: unknown) {}
   }
   const paramsMetadata = Reflect.getMetadata(

@@ -5,11 +5,13 @@ import {
   MinLength,
   IsBoolean,
   IsArray,
-  IsEnum,
+  IsIn,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { ValidRoles } from '../../auth/interfaces/valid-roles';
+import { AssignableRole, ValidRoles } from '../../auth/interfaces/valid-roles';
+
+const ASSIGNABLE_ROLES: AssignableRole[] = [ValidRoles.user, ValidRoles.admin];
 
 export class UpdateUserDTO {
   @ApiPropertyOptional({ example: 'user@example.com' })
@@ -29,10 +31,16 @@ export class UpdateUserDTO {
   @IsOptional()
   active?: boolean;
 
-  @ApiPropertyOptional({ example: ['user', 'admin'] })
+  @ApiPropertyOptional({
+    example: ['user', 'admin'],
+    description:
+      'Roles assignable via API. "super-user" cannot be assigned through the API.',
+  })
   @IsArray()
-  @IsString({ each: true })
-  @IsEnum(ValidRoles, { each: true, message: 'Each role must be a valid role' })
+  @IsIn(ASSIGNABLE_ROLES, {
+    each: true,
+    message: 'Only "user" and "admin" roles can be assigned through the API',
+  })
   @IsOptional()
-  roles?: string[];
+  roles?: AssignableRole[];
 }

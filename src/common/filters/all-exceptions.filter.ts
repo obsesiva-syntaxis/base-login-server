@@ -6,6 +6,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Response } from 'express';
+import { pino } from 'pino';
 
 interface HttpExceptionResponse {
   message: string | string[];
@@ -15,9 +16,12 @@ interface HttpExceptionResponse {
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
+  private readonly logger = pino();
+
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
+    const url = ctx.getRequest().url;
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Internal server error';
@@ -34,13 +38,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
           ? responseBody.message.join(', ')
           : responseBody.message ?? exception.message;
       }
+    } else {
+      this.logger.error(exception, `Unhandled error on ${url}`);
     }
 
     response.status(status).json({
       statusCode: status,
       message,
       timestamp: new Date().toISOString(),
-      path: ctx.getRequest().url,
+      data: { path: url },
     });
   }
 }

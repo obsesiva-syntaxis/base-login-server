@@ -1,12 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { SessionGuard } from './session.guard';
-import { USER_LOG_REPOSITORY } from '../repositories';
 import { UnauthorizedException } from '@nestjs/common';
 import * as crypto from 'crypto';
-
-const mockUserLogRepository = {
-  findByUserId: jest.fn(),
-};
 
 const buildContext = (req: any) => ({
   switchToHttp: () => ({
@@ -19,19 +14,13 @@ const tokenHash = (token: string) =>
 
 describe('SessionGuard', () => {
   let guard: SessionGuard;
-  let userLogRepository: typeof mockUserLogRepository;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        SessionGuard,
-        { provide: USER_LOG_REPOSITORY, useValue: mockUserLogRepository },
-      ],
+      providers: [SessionGuard],
     }).compile();
 
     guard = module.get<SessionGuard>(SessionGuard);
-    userLogRepository = module.get(USER_LOG_REPOSITORY);
-
     jest.clearAllMocks();
   });
 
@@ -41,11 +30,8 @@ describe('SessionGuard', () => {
 
   it('should return true when the session token matches', async () => {
     const token = 'valid-token';
-    userLogRepository.findByUserId.mockResolvedValue({
-      token: tokenHash(token),
-    });
     const context: any = buildContext({
-      user: { id: 'uuid' },
+      user: { id: 'uuid', userLog: { token: tokenHash(token) } },
       headers: { authorization: `Bearer ${token}` },
     });
 
@@ -63,7 +49,10 @@ describe('SessionGuard', () => {
   });
 
   it('should throw when Authorization header is missing', async () => {
-    const context: any = buildContext({ user: { id: 'uuid' }, headers: {} });
+    const context: any = buildContext({
+      user: { id: 'uuid', userLog: null },
+      headers: {},
+    });
 
     await expect(guard.canActivate(context)).rejects.toThrow(
       UnauthorizedException,
@@ -72,7 +61,7 @@ describe('SessionGuard', () => {
 
   it('should throw when Authorization header is malformed', async () => {
     const context: any = buildContext({
-      user: { id: 'uuid' },
+      user: { id: 'uuid', userLog: { token: tokenHash('tok') } },
       headers: { authorization: 'Basic abc123' },
     });
 
@@ -82,9 +71,8 @@ describe('SessionGuard', () => {
   });
 
   it('should throw when no active session exists', async () => {
-    userLogRepository.findByUserId.mockResolvedValue(null);
     const context: any = buildContext({
-      user: { id: 'uuid' },
+      user: { id: 'uuid', userLog: null },
       headers: { authorization: 'Bearer valid-token' },
     });
 
@@ -94,30 +82,13 @@ describe('SessionGuard', () => {
   });
 
   it('should throw when the token hash does not match the stored session', async () => {
-    userLogRepository.findByUserId.mockResolvedValue({
-      token: tokenHash('other-token'),
-    });
     const context: any = buildContext({
-      user: { id: 'uuid' },
+      user: { id: 'uuid', userLog: { token: tokenHash('other-token') } },
       headers: { authorization: 'Bearer valid-token' },
     });
 
     await expect(guard.canActivate(context)).rejects.toThrow(
       UnauthorizedException,
     );
-  });
-
-  it('should look up the session for the authenticated user id', async () => {
-    userLogRepository.findByUserId.mockResolvedValue({
-      token: tokenHash('valid-token'),
-    });
-    const context: any = buildContext({
-      user: { id: 'uuid-123' },
-      headers: { authorization: 'Bearer valid-token' },
-    });
-
-    await guard.canActivate(context);
-
-    expect(userLogRepository.findByUserId).toHaveBeenCalledWith('uuid-123');
   });
 });

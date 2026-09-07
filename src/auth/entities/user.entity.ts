@@ -7,6 +7,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { UserLog } from './userLog.entity';
 
 @Entity('user')
 export class User {
@@ -40,4 +41,7 @@ export class User {
 
   @DeleteDateColumn({ type: 'timestamptz', nullable: true })
   deleted_at: Date;
+
+  @Exclude()
+  userLog?: UserLog | null;
 }

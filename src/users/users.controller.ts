@@ -8,7 +8,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
-import { UpdateUserDTO, PaginationDTO } from './dto';
+import { UpdateUserDTO, QueryUsersDTO } from './dto';
 import { Auth } from '../auth/decorators/auth.decorator';
 import { ValidRoles } from '../auth/interfaces/valid-roles';
 
@@ -30,10 +30,18 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  @ApiOperation({ summary: 'List all users (paginated)' })
-  @ApiResponse({ status: 200, description: 'Returns paginated users' })
-  findAll(@Query() pagination: PaginationDTO) {
-    return this.usersService.findAll(pagination);
+  @ApiOperation({
+    summary:
+      'List users filtered by email, fullname, active, roles or created_at (paginated)',
+  })
+  @ApiResponse({ status: 200, description: 'Returns filtered paginated users' })
+  @ApiResponse({
+    status: 400,
+    description:
+      'At least one filter parameter is required (email, fullname, active, roles, createdAtFrom, createdAtTo)',
+  })
+  findAll(@Query() query: QueryUsersDTO) {
+    return this.usersService.findAll(query);
   }
 
   @Get(':id')

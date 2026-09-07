@@ -51,10 +51,11 @@ describe('UsersController', () => {
   });
 
   describe('findAll', () => {
-    it('should call usersService.findAll with pagination', async () => {
-      const result = await controller.findAll({ page: 1, limit: 10 });
+    it('should call usersService.findAll with the query', async () => {
+      const query = { page: 1, limit: 10, email: 'test@test.com' };
+      const result = await controller.findAll(query);
 
-      expect(usersService.findAll).toHaveBeenCalledWith({ page: 1, limit: 10 });
+      expect(usersService.findAll).toHaveBeenCalledWith(query);
       expect(result).toEqual({ rows: [], total: 0, page: 1, limit: 10 });
     });
   });

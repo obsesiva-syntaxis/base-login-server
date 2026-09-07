@@ -1,21 +1,14 @@
 import {
   CanActivate,
   ExecutionContext,
-  Inject,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { User } from '../entities/user.entity';
-import { USER_LOG_REPOSITORY, IUserLogRepository } from '../repositories';
 
 @Injectable()
 export class SessionGuard implements CanActivate {
-  constructor(
-    @Inject(USER_LOG_REPOSITORY)
-    private readonly userLogRepository: IUserLogRepository,
-  ) {}
-
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest();
     const user = req.user as User;
@@ -30,13 +23,20 @@ export class SessionGuard implements CanActivate {
 
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
-    const userLog = await this.userLogRepository.findByUserId(user.id);
-    if (!userLog || userLog.token !== tokenHash) {
+    const userLog = user.userLog;
+    if (!userLog || !this.safeHashEqual(tokenHash, userLog.token)) {
       throw new UnauthorizedException(
         'Invalid or expired session, please login again.',
       );
     }
     return true;
+  }
+
+  private safeHashEqual(a: string, b: string): boolean {
+    const aBuff = Buffer.from(a);
+    const bBuff = Buffer.from(b);
+    if (aBuff.length !== bBuff.length) return false;
+    return crypto.timingSafeEqual(aBuff, bBuff);
   }
 
   private extractBearerToken(req: {

@@ -23,9 +23,7 @@ const mockAuthService = {
   register: jest.fn().mockResolvedValue(mockUser),
   login: jest.fn().mockResolvedValue({ token: 'token', user: mockUser }),
   logout: jest.fn().mockResolvedValue(true),
-  checkAuthStatus: jest
-    .fn()
-    .mockResolvedValue({ ...mockUser, token: 'new-token' }),
+  checkAuthStatus: jest.fn().mockResolvedValue({ ...mockUser }),
 };
 
 describe('AuthController', () => {
@@ -86,18 +84,21 @@ describe('AuthController', () => {
   });
 
   describe('logout', () => {
-    it('should call authService.logout with the id', async () => {
-      const result = await controller.logout('uuid-uuid-uuid');
-      expect(authService.logout).toHaveBeenCalledWith('uuid-uuid-uuid');
+    it('should call authService.logout with the id and the current user', async () => {
+      const result = await controller.logout('uuid-uuid-uuid', mockUser);
+      expect(authService.logout).toHaveBeenCalledWith(
+        'uuid-uuid-uuid',
+        mockUser,
+      );
       expect(result).toBe(true);
     });
   });
 
   describe('checkAuthStatus', () => {
-    it('should return user with new token', async () => {
+    it('should return user data', async () => {
       const result = await controller.checkAuthStatus(mockUser);
       expect(authService.checkAuthStatus).toHaveBeenCalledWith(mockUser);
-      expect(result).toEqual({ ...mockUser, token: 'new-token' });
+      expect(result).toEqual({ ...mockUser });
     });
   });
 });
